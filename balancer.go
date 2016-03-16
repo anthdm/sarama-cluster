@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"log"
 	"math"
 	"sort"
 
@@ -56,7 +57,9 @@ func (info topicInfo) Ranges() map[string][]int32 {
 	sort.Strings(info.MemberIDs)
 
 	mlen := len(info.MemberIDs)
+	log.Printf("members: %d", mlen)
 	plen := len(info.Partitions)
+	log.Printf("partitions: %d", plen)
 	res := make(map[string][]int32, mlen)
 
 	for pos, memberID := range info.MemberIDs {
@@ -110,8 +113,11 @@ func newBalancer(client sarama.Client) *balancer {
 }
 
 func (r *balancer) Topic(name string, memberID string) error {
+	log.Printf("looking for topic: %s", name)
+
 	topic, ok := r.topics[name]
 	if !ok {
+		log.Printf("could not find topic: %s", name)
 		nums, err := r.client.Partitions(name)
 		if err != nil {
 			return err

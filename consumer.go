@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"log"
 	"sort"
 	"time"
 
@@ -140,10 +141,13 @@ func (c *Consumer) mainLoop() {
 	for {
 		// rebalance
 		if err := c.rebalance(); err != nil {
+			log.Printf("error: %v", err)
 			c.handleError(err)
 			time.Sleep(c.client.config.Metadata.Retry.Backoff)
 			continue
 		}
+
+		log.Println("going to consumer")
 
 		// enter consume state
 		if c.consume() {
@@ -221,6 +225,9 @@ func (c *Consumer) release() (err error) {
 
 // Performs a heartbeat, part of the mainLoop()
 func (c *Consumer) heartbeat() error {
+	log.Println(c.groupID)
+	log.Println(c.memberID)
+	log.Println(c.generationID)
 	broker, err := c.client.Coordinator(c.groupID)
 	if err != nil {
 		return err
@@ -273,7 +280,7 @@ func (c *Consumer) rebalance() error {
 	case err != nil:
 		return err
 	}
-	// sarama.Logger.Printf("cluster/consumer %s/%d joined group %s\n", c.memberID, c.generationID, c.groupID)
+	log.Printf("cluster/consumer %s/%d joined group %s\n", c.memberID, c.generationID, c.groupID)
 
 	// Sync consumer group state, fetch subscriptions
 	subs, err := c.syncGroup(strategy)
@@ -296,6 +303,7 @@ func (c *Consumer) rebalance() error {
 	for topic, partitions := range subs {
 		for _, partition := range partitions {
 			if err := c.createConsumer(topic, partition, offsets[topic][partition]); err != nil {
+				log.Printf("failed to create consumers: %v", err)
 				_ = c.release()
 				_ = c.leaveGroup()
 				return err
@@ -321,6 +329,8 @@ func (c *Consumer) joinGroup() (*balancer, error) {
 		SessionTimeout: int32(c.client.config.Group.Session.Timeout / time.Millisecond),
 		ProtocolType:   "consumer",
 	}
+
+	log.Printf("i am joining a group: %+v", c)
 
 	meta := &sarama.ConsumerGroupMemberMetadata{
 		Version: 1,
@@ -353,6 +363,7 @@ func (c *Consumer) joinGroup() (*balancer, error) {
 		if err != nil {
 			return nil, err
 		}
+		log.Printf("members: %v", members)
 
 		strategy, err = newBalancerFromMeta(c.client, members)
 		if err != nil {
@@ -459,6 +470,8 @@ func (c *Consumer) leaveGroup() error {
 	if err != nil {
 		return err
 	}
+
+	log.Printf("leaving the group: %+v", broker)
 
 	_, err = broker.LeaveGroup(&sarama.LeaveGroupRequest{
 		GroupId:  c.groupID,
